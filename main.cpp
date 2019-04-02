@@ -6,6 +6,16 @@
 )
 (insert-fori)
  */
+
+#include "Expression.h"
+
+#include "Parser.h"
+
+#include "Lexer.h"
+
+#include <cassert>
+#include <stdio.h>
+
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
@@ -125,6 +135,18 @@ public:
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateAdd(v1, v2);
   }
+  Value *createSub(BasicBlock *BB, Value *v1, Value *v2) {
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateSub(v1, v2);
+  }
+  Value *createDiv(BasicBlock *BB, Value *v1, Value *v2) {
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateSDiv(v1, v2);
+  }
+  Value *createMul(BasicBlock *BB, Value *v1, Value *v2) {
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateMul(v1, v2);
+  }
   void returnInst(BasicBlock *BB, Value *v) { ReturnInst::Create(ctx, v, BB); }
 
   LLVMContext &getCtx() { return ctx; }
@@ -151,10 +173,11 @@ int main(int argc, char **argv) {
                                        {Type::getInt32Ty(mm.getCtx())});
       auto *BB = tmpFunc.second;
       mm.printVal(BB, "%s\n", mm.createString("hello"));
-
-      mm.printVal(
-          BB, "%i\n",
-          mm.createAdd(BB, mm.createConst(10), tmpFunc.first->args().begin()));
+      auto expr = mm.createDiv(
+          BB,
+          mm.createAdd(BB, mm.createConst(10), tmpFunc.first->args().begin()),
+          mm.createConst(10));
+      mm.printVal(BB, "%i\n", expr);
       {
         auto v = ConstantInt::get(mm.getCtx(), APInt(32, 0));
         mm.returnInst(BB, v);
@@ -175,3 +198,98 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+
+int yyparse(SExpression **expression, yyscan_t scanner);
+
+SExpression *getAST(const char *expr) {
+  SExpression *expression = NULL;
+  yyscan_t scanner;
+  YY_BUFFER_STATE state;
+
+  if (yylex_init(&scanner)) {
+    return NULL;
+  }
+
+  state = yy_scan_string(expr, scanner);
+
+  if (yyparse(&expression, scanner)) {
+    return NULL;
+  }
+
+  yy_delete_buffer(state, scanner);
+
+  yylex_destroy(scanner);
+
+  return expression;
+}
+
+int evaluate(SExpression *e,
+             std::unordered_map<std::string, SExpression *> &env) {
+  if (e == NULL)
+    return 0;
+  switch (e->type) {
+  case eVALUE:
+    return e->value;
+  case eSEM: {
+    evaluate(e->left, env);
+    return (evaluate(e->right, env));
+  }
+  case eCOLON:
+    return evaluate(e->left, env) * evaluate(e->right, env);
+  case eMULTIPLY:
+    return evaluate(e->left, env) * evaluate(e->right, env);
+  case eDIV:
+    return evaluate(e->left, env) / evaluate(e->right, env);
+  case eADD:
+    return evaluate(e->left, env) + evaluate(e->right, env);
+  case eCALL: {
+
+    if (strcmp(e->name, "print") == 0) {
+      int val = evaluate(e->left, env);
+      printf("printing %i\n", val);
+      return val;
+    } else {
+      env["arg"] = e->left;
+      return evaluate(env[std::string(e->name)], env);
+    }
+  }
+  case eDEF: {
+    env[std::string(e->name)] = e->left;
+    return 0;
+  }
+  case eDEFUN: {
+    env[std::string(e->name)] = e->left;
+    return 0;
+  }
+  case eREF: {
+    return evaluate(env[std::string(e->name)], env);
+  }
+  default:
+    std::cout << "[ERROR] Unknown OP\n";
+    abort();
+    return 0;
+  }
+}
+
+// int main(void) {
+// char test[] =
+// "defun f:arg + 2; def x: f(f(2)) + 1;\nprint([4:1+1]);\nprint((x*3));";
+// char tmp[0x100] = {};
+// char *line = (char *)tmp;
+// while (true) {
+// size_t size = 0x100;
+// int read = 0;
+// if ((read = getline((char **)&line, &size, stdin)) == -1)
+  // continue;
+// line[read - 1] = '\0';
+// printf("input: %s\n", line);
+// fscanf(stdin, "%s", tmp);
+// SExpression *e = getAST(test);
+// std::unordered_map<std::string, SExpression *> env;
+// int result = evaluate(e, env);
+// printf("Result of '%s' is %d\n", test, result);
+// deleteExpression(e);
+// break;
+// }
+// return 0;
+// }

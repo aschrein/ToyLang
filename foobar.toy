@@ -4,7 +4,7 @@ defun bar : if (arg) arg + bar(arg - 1) else 0 ;
 print(bar(14));
 defun foobar : if (arg)
                    (if (arg-100) arg + foobar(arg - 1)
-		     else (0))
+		     else (666))
                  else (0);
 print(foobar(100));
 print(foobar(99));

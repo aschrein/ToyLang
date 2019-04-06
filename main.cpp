@@ -1,12 +1,3 @@
-/*
-(* 1 2 )
-(print cquery-project-roots)
-(defun insert-fori ()
-(insert "for (int i = 0; i < N; i++) {}")
-)
-(insert-fori)
- */
-
 #include "Expression.h"
 
 #include "Parser.h"
@@ -37,10 +28,6 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -90,10 +77,7 @@ public:
                                            {Type::getInt8PtrTy(ctx)}, true),
                          Function::ExternalLinkage, "printf", module);
   }
-  void pushFun(Function *F) {
-    fstack.push_back(F);
-    // bbstack.clear();
-  }
+  void pushFun(Function *F) { fstack.push_back(F); }
   Value *getFirstArgument() { return fstack.back()->args().begin(); }
   void popFun() { fstack.pop_back(); }
   void pushBB(BasicBlock *BB) { bbstack.push_back(BB); }
@@ -199,7 +183,6 @@ public:
     return {ThenBB, ElseBB, MergeBB};
   }
   Value *merge(BasicBlock *b1, Value *v1, BasicBlock *b2, Value *v2) {
-    // pushBB(merge);
     auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     PHINode *PN = builder->CreatePHI(Type::getInt32Ty(ctx), 2);
@@ -222,8 +205,6 @@ public:
     module->print(out, nullptr, true);
   }
 };
-
-// int yyparse(SExpression **expression, yyscan_t scanner);
 
 SExpression *getAST(const char *expr) {
   SExpression *expression = NULL;
@@ -249,9 +230,6 @@ SExpression *getAST(const char *expr) {
 
 struct Env {
   MyModule mm;
-  // std::pair<Function *, BasicBlock *> curFn;
-  // std::pair<Function *, BasicBlock *> mainFn;
-  // std::unordered_map<std::string, SExpression *>;
 };
 
 Value *evaluate(SExpression *e, Env &env) {
@@ -280,15 +258,11 @@ Value *evaluate(SExpression *e, Env &env) {
 
     if (strcmp(e->name, "print") == 0) {
       auto *val = evaluate(e->left, env);
-      // printf("printing %i\n", val);
       env.mm.printVal("%i\n", val);
       return NULL;
     } else {
       auto *val = evaluate(e->left, env);
-
       return env.mm.createCall(e->name, {val});
-      // env["arg"] = e->left;
-      // return evaluate(env[std::string(e->name)], env);
     }
     return NULL;
   }
@@ -309,7 +283,7 @@ Value *evaluate(SExpression *e, Env &env) {
     return mergeVal;
   }
   case eDEF: {
-    // env[std::string(e->name)] = e->left;
+    ASS(false && "TODO");
     return NULL;
   }
   case eDEFUN: {
@@ -328,7 +302,7 @@ Value *evaluate(SExpression *e, Env &env) {
     if (strcmp(e->name, "arg") == 0) {
       return env.mm.getFirstArgument();
     }
-    // return evaluate(env[std::string(e->name)], env);
+    ASS(false && "TODO");
     return NULL;
   }
   default:
@@ -348,7 +322,6 @@ int main(int argc, char **argv) {
     fileSize = file.tellg();
     file.seekg(0, std::ios::beg);
     file_contents.reserve(fileSize);
-    // file.read(&file_contents[0], fileSize);
     file_contents.insert(file_contents.begin(),
                          std::istream_iterator<char>(file),
                          std::istream_iterator<char>());

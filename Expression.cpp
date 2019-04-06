@@ -19,9 +19,10 @@ static SExpression *allocateExpression() {
   return b;
 }
 
-SExpression *createIF(SExpression *cond, SExpression *left, SExpression *right) {
+SExpression *createIF(SExpression *cond, SExpression *left,
+                      SExpression *right) {
   SExpression *out = allocateExpression();
-  
+
   out->type = eIF;
   out->cond = cond;
   out->left = left;

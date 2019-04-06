@@ -153,6 +153,16 @@ public:
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateMul(v1, v2);
   }
+  Value *createEqeq(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateICmpEQ(v1, v2);
+  }
+  Value *createLess(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateICmpSLT(v1, v2);
+  }
   void createGoto(BasicBlock *toBB) {
     auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
@@ -167,8 +177,8 @@ public:
     auto BB = bbstack.back();
     // bbstack.pop_back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
-    auto CondExp =
-        builder->CreateICmpNE(cond, ConstantInt::get(ctx, APInt(32, 0)));
+    auto CondExp = cond;
+    // builder->CreateICmpNE(cond, ConstantInt::get(ctx, APInt(32, 0)));
 
     BasicBlock *ThenBB = BasicBlock::Create(ctx, "then");
     BasicBlock *ElseBB = BasicBlock::Create(ctx, "else");
@@ -246,10 +256,20 @@ Value *evaluate(SExpression *e, Env &env) {
   case eCOLON: {
     return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
   }
+  case eEQEQ: {
+    return env.mm.createEqeq(evaluate(e->left, env), evaluate(e->right, env));
+  }
+  case eLESS: {
+    return env.mm.createLess(evaluate(e->left, env), evaluate(e->right, env));
+  }
   case eMULTIPLY:
     return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
-  case eMINUS:
-    return env.mm.createSub(evaluate(e->left, env), evaluate(e->right, env));
+  case eMINUS: {
+    if (e->left)
+      return env.mm.createSub(evaluate(e->left, env), evaluate(e->right, env));
+    else
+      return env.mm.createMul(env.mm.createConst(-1), evaluate(e->right, env));
+  }
   case eDIV:
     return env.mm.createDiv(evaluate(e->left, env), evaluate(e->right, env));
   case eADD:

@@ -13,6 +13,8 @@ enum EOperationType {
   eCALL,
   eIF,
   eADD,
+  eLESS,
+  eEQEQ,
   eMINUS
 };
 

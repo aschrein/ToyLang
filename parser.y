@@ -40,6 +40,8 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
 %token TOKEN_MINUS     "-"
 %token TOKEN_STAR     "*"
 %token TOKEN_DIV     "/"
+%token TOKEN_EQEQ     "=="
+%token TOKEN_LESS     "<"
 %token <value> TOKEN_NUMBER "number"
 %token <name> TOKEN_NAME "name"
 %type <expression> expr
@@ -47,6 +49,8 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
 %left ";"
 %left "else"
 %left ":"
+%left "<"
+%left "=="
 %left "+"
 %left "-"   		
 %left "*"
@@ -64,6 +68,8 @@ expr
 | expr[L] ";" { $$ = $L; }
 | expr[L] "*" expr[R] { $$ = createOperation( eMULTIPLY, $L, $R ); }
 | expr[L] "-" expr[R] { $$ = createOperation( eMINUS, $L, $R ); }
+| expr[L] "<" expr[R] { $$ = createOperation( eLESS, $L, $R ); }
+| expr[L] "==" expr[R] { $$ = createOperation( eEQEQ, $L, $R ); }
 | expr[L] "/" expr[R] { $$ = createOperation( eDIV, $L, $R ); }
 | "name" "(" expr[E] ")"            { $$ = createCall($1, $E); }
 | "def" "name"[N] ":" expr[E] { $$ = createDef($N, $E); }
@@ -71,6 +77,7 @@ expr
 | "defun" "name"[N] ":" expr[E] { $$ = createDefun($N, $E); }
 | "(" expr[E] ")"     { $$ = $E; }
 | "number"             { $$ = createNumber($1); }
+| "-" expr[E]             { $$ = createOperation(eMINUS, NULL, $E); }
 | "name" {$$ = createRef($1);}
 | "[" expr[L] ":" expr[R] "]" { $$ = createOperation(eCOLON, $L, $R); }
 ;

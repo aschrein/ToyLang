@@ -1,10 +1,24 @@
 defun f:(2*arg - 1)/3;
 defun foo : f(arg) + 666;
-defun bar : if (arg) arg + bar(arg - 1) else 0 ;
+defun bar : if (0 < arg) arg + bar(arg - 1) else 0 ;
 print(bar(14));
-defun foobar : if (arg)
-                   (if (arg-100) arg + foobar(arg - 1)
+defun foobar : if (0 < arg)
+                   (if (arg-100 == 0) arg + foobar(arg - 1)
 		     else (666))
-                 else (0);
+                 else if (arg+10 == 0) 777 else 0;
 print(foobar(100));
 print(foobar(99));
+print(foobar(-10));
+defun fib: if (0 < arg) arg + fib(arg - 1) else 0;
+print(fib(1));
+print(fib(2));
+print(fib(3));
+print(fib(4));
+defun fact: if (0 < arg) arg * fact(arg - 1) else 1;
+print(fact(1));
+print(fact(2));
+print(fact(3));
+print(fact(4));
+print(fact(5));
+print(fact(-5) == 1);
+

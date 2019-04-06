@@ -20,6 +20,8 @@
 [0-9]+       { sscanf(yytext, "%d", &yylval->value); return TOKEN_NUMBER; }
 "*"          { return TOKEN_STAR; }
 ":"          { return TOKEN_COLON; }
+"<"          { return TOKEN_LESS; }
+"=="         { return TOKEN_EQEQ; }
 ";"          { return TOKEN_SEMICOLON; }
 "["          { return TOKEN_LSPAREN; }
 "]"          { return TOKEN_RSPAREN; }

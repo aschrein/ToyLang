@@ -24,8 +24,11 @@ add_custom_command(
 # execute_process(COMMAND bash OUTPUT_VARIABLE LEX)
 
 add_executable(llvmTest main.cpp Expression.cpp Lexer.cpp Parser.cpp)
-target_include_directories(llvmTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -fno-rtti -fvisibility-inlines-hidden")
+get_filename_component(CUR_ABS ${CMAKE_CURRENT_SOURCE_DIR} ABSOLUTE)
+get_filename_component(BIN_ABS ${CMAKE_CURRENT_BINARY_DIR} ABSOLUTE)
+message(${BIN_ABS}  ${CUR_ABS})
+# include_directories(})
+set(CMAKE_CXX_FLAGS "-I${BIN_ABS}  -I${CUR_ABS} ${CMAKE_CXX_FLAGS} -std=c++11 -pthread -fno-rtti -fvisibility-inlines-hidden")
 # add_dependencies(llvmTest LEX)
 target_link_libraries(llvmTest PRIVATE
 LLVMX86AsmParser

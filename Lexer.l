@@ -25,10 +25,13 @@
 "]"          { return TOKEN_RSPAREN; }
 "/"          { return TOKEN_DIV; }
 "+"          { return TOKEN_PLUS; }
+"-"          { return TOKEN_MINUS; }
 "("          { return TOKEN_LPAREN; }
 ")"          { return TOKEN_RPAREN; }
 "defun"      { return TOKEN_DEFUN; }
 "def"        { return TOKEN_DEF; }
+"if"        { return TOKEN_IF; }
+"else"        { return TOKEN_ELSE; }
 [a-z]+       {
   //yylval->name = (char*)malloc(0x100);
   sscanf(yytext, "%s", yylval->name);

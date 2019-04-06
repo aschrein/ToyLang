@@ -11,7 +11,9 @@ enum EOperationType {
   eDIV,
   eREF,
   eCALL,
-  eADD
+  eIF,
+  eADD,
+  eMINUS
 };
 
 struct SExpression {
@@ -20,6 +22,7 @@ struct SExpression {
   int value;
   SExpression *left;
   SExpression *right;
+  SExpression *cond;
 };
 
 SExpression *createNumber(int value);
@@ -31,4 +34,5 @@ SExpression *createDefun(char const *name, SExpression *exp);
 SExpression *createCall(char const *name, SExpression *exp);
 SExpression *createRef(char const *name);
 SExpression *createColon(SExpression *lexp, SExpression *rexp);
+SExpression *createIF(SExpression *, SExpression *, SExpression *);
 #endif /* __EXPRESSION_H__ */

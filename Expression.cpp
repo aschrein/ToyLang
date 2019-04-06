@@ -15,8 +15,18 @@ static SExpression *allocateExpression() {
   b->name = NULL;
   b->left = NULL;
   b->right = NULL;
-
+  b->cond = NULL;
   return b;
+}
+
+SExpression *createIF(SExpression *cond, SExpression *left, SExpression *right) {
+  SExpression *out = allocateExpression();
+  
+  out->type = eIF;
+  out->cond = cond;
+  out->left = left;
+  out->right = right;
+  return out;
 }
 
 SExpression *createNumber(int value) {

@@ -72,6 +72,9 @@ private:
   std::unordered_map<std::string, GlobalVariable *> strConstAlloc;
   Function *PrintF;
 
+  std::vector<Function *> fstack;
+  std::vector<BasicBlock *> bbstack;
+
 public:
   MyModule() {
     InitializeNativeTarget();
@@ -87,6 +90,18 @@ public:
                                            {Type::getInt8PtrTy(ctx)}, true),
                          Function::ExternalLinkage, "printf", module);
   }
+  void pushFun(Function *F) {
+    fstack.push_back(F);
+    // bbstack.clear();
+  }
+  Value *getFirstArgument() { return fstack.back()->args().begin(); }
+  void popFun() { fstack.pop_back(); }
+  void pushBB(BasicBlock *BB) { bbstack.push_back(BB); }
+  BasicBlock *popBB() {
+    auto back = bbstack.back();
+    bbstack.pop_back();
+    return back;
+  }
   std::pair<Function *, BasicBlock *> createFunction(std::string const &name,
                                                      Type *RetTy,
                                                      ArrayRef<Type *> Params) {
@@ -95,8 +110,8 @@ public:
                          Function::ExternalLinkage, name.c_str(), module);
     return {Func, BasicBlock::Create(ctx, "entry", Func)};
   }
-  Value *createCall(BasicBlock *BB, std::string const &name,
-                    ArrayRef<Value *> Params) {
+  Value *createCall(std::string const &name, ArrayRef<Value *> Params) {
+    auto BB = bbstack.back();
     CallInst *call =
         CallInst::Create(module->getFunction(name.c_str()), Params, "", BB);
     call->setTailCall(false);
@@ -122,32 +137,81 @@ public:
         iter->second->getValueType(), iter->second, gep_params);
     return msgptr;
   }
-  void printVal(BasicBlock *BB, const char *format, Value *P) {
+  void printVal(const char *format, Value *P) {
+    auto BB = bbstack.back();
     auto fmt = createString(format);
     Value *puts_params[] = {fmt, P};
     CallInst *putsCall = CallInst::Create(PrintF, puts_params, "", BB);
   }
   Value *createConst(int c) {
-    ConstantInt *val_mem = ConstantInt::get(ctx, APInt(32, c));
-    return val_mem;
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateAdd(ConstantInt::get(ctx, APInt(32, c)),
+                              ConstantInt::get(ctx, APInt(32, 0)));
   }
-  Value *createAdd(BasicBlock *BB, Value *v1, Value *v2) {
+  Value *createAdd(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateAdd(v1, v2);
   }
-  Value *createSub(BasicBlock *BB, Value *v1, Value *v2) {
+  Value *createSub(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateSub(v1, v2);
   }
-  Value *createDiv(BasicBlock *BB, Value *v1, Value *v2) {
+  Value *createDiv(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateSDiv(v1, v2);
   }
-  Value *createMul(BasicBlock *BB, Value *v1, Value *v2) {
+  Value *createMul(Value *v1, Value *v2) {
+    auto BB = bbstack.back();
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     return builder->CreateMul(v1, v2);
   }
-  void returnInst(BasicBlock *BB, Value *v) { ReturnInst::Create(ctx, v, BB); }
+  void createGoto(BasicBlock *toBB) {
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    builder->CreateBr(toBB);
+  }
+  struct CondBranch {
+    BasicBlock *then;
+    BasicBlock *belse;
+    BasicBlock *merge;
+  };
+  CondBranch createCond(Value *cond) {
+    auto BB = bbstack.back();
+    // bbstack.pop_back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    auto CondExp =
+        builder->CreateICmpNE(cond, ConstantInt::get(ctx, APInt(32, 0)));
+
+    BasicBlock *ThenBB = BasicBlock::Create(ctx, "then");
+    BasicBlock *ElseBB = BasicBlock::Create(ctx, "else");
+    BasicBlock *MergeBB = BasicBlock::Create(ctx, "merge");
+
+    ThenBB->insertInto(fstack.back());
+    ElseBB->insertInto(fstack.back());
+    MergeBB->insertInto(fstack.back());
+
+    builder->CreateCondBr(CondExp, ThenBB, ElseBB);
+
+    return {ThenBB, ElseBB, MergeBB};
+  }
+  Value *merge(BasicBlock *b1, Value *v1, BasicBlock *b2, Value *v2) {
+    // pushBB(merge);
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    PHINode *PN = builder->CreatePHI(Type::getInt32Ty(ctx), 2);
+
+    PN->addIncoming(v1, b1);
+    PN->addIncoming(v2, b2);
+    return PN;
+  }
+  void returnInst(Value *v) {
+    auto BB = bbstack.back();
+    ReturnInst::Create(ctx, v, BB);
+  }
 
   LLVMContext &getCtx() { return ctx; }
 
@@ -159,47 +223,7 @@ public:
   }
 };
 
-int main(int argc, char **argv) {
-
-  MyModule mm;
-
-  {
-    auto FuncDesc = mm.createFunction("main", Type::getInt32Ty(mm.getCtx()),
-                                      {Type::getInt32Ty(mm.getCtx())});
-    auto *BB = FuncDesc.second;
-
-    {
-      auto tmpFunc = mm.createFunction("tmp", Type::getInt32Ty(mm.getCtx()),
-                                       {Type::getInt32Ty(mm.getCtx())});
-      auto *BB = tmpFunc.second;
-      mm.printVal(BB, "%s\n", mm.createString("hello"));
-      auto expr = mm.createDiv(
-          BB,
-          mm.createAdd(BB, mm.createConst(10), tmpFunc.first->args().begin()),
-          mm.createConst(10));
-      mm.printVal(BB, "%i\n", expr);
-      {
-        auto v = ConstantInt::get(mm.getCtx(), APInt(32, 0));
-        mm.returnInst(BB, v);
-      }
-    }
-
-    {
-      mm.createCall(BB, "tmp", {ConstantInt::get(mm.getCtx(), APInt(32, 0))});
-      auto v = ConstantInt::get(mm.getCtx(), APInt(32, 0));
-
-      mm.returnInst(BB, v);
-    }
-  }
-
-  mm.dump("out.ll");
-
-  llvm_shutdown();
-
-  return 0;
-}
-
-int yyparse(SExpression **expression, yyscan_t scanner);
+// int yyparse(SExpression **expression, yyscan_t scanner);
 
 SExpression *getAST(const char *expr) {
   SExpression *expression = NULL;
@@ -223,46 +247,89 @@ SExpression *getAST(const char *expr) {
   return expression;
 }
 
-int evaluate(SExpression *e,
-             std::unordered_map<std::string, SExpression *> &env) {
+struct Env {
+  MyModule mm;
+  // std::pair<Function *, BasicBlock *> curFn;
+  // std::pair<Function *, BasicBlock *> mainFn;
+  // std::unordered_map<std::string, SExpression *>;
+};
+
+Value *evaluate(SExpression *e, Env &env) {
   if (e == NULL)
-    return 0;
+    return NULL;
   switch (e->type) {
   case eVALUE:
-    return e->value;
+    return env.mm.createConst(e->value);
   case eSEM: {
     evaluate(e->left, env);
-    return (evaluate(e->right, env));
+    evaluate(e->right, env);
+    return NULL;
   }
-  case eCOLON:
-    return evaluate(e->left, env) * evaluate(e->right, env);
+  case eCOLON: {
+    return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
+  }
   case eMULTIPLY:
-    return evaluate(e->left, env) * evaluate(e->right, env);
+    return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
+  case eMINUS:
+    return env.mm.createSub(evaluate(e->left, env), evaluate(e->right, env));
   case eDIV:
-    return evaluate(e->left, env) / evaluate(e->right, env);
+    return env.mm.createDiv(evaluate(e->left, env), evaluate(e->right, env));
   case eADD:
-    return evaluate(e->left, env) + evaluate(e->right, env);
+    return env.mm.createAdd(evaluate(e->left, env), evaluate(e->right, env));
   case eCALL: {
 
     if (strcmp(e->name, "print") == 0) {
-      int val = evaluate(e->left, env);
-      printf("printing %i\n", val);
-      return val;
+      auto *val = evaluate(e->left, env);
+      // printf("printing %i\n", val);
+      env.mm.printVal("%i\n", val);
+      return NULL;
     } else {
-      env["arg"] = e->left;
-      return evaluate(env[std::string(e->name)], env);
+      auto *val = evaluate(e->left, env);
+
+      return env.mm.createCall(e->name, {val});
+      // env["arg"] = e->left;
+      // return evaluate(env[std::string(e->name)], env);
     }
+    return NULL;
+  }
+  case eIF: {
+    auto *val = evaluate(e->cond, env);
+    auto cond = env.mm.createCond(val);
+    env.mm.popBB();
+    env.mm.pushBB(cond.then);
+    auto *ThenVal = evaluate(e->left, env);
+    env.mm.createGoto(cond.merge);
+    auto ThenBB = env.mm.popBB();
+    env.mm.pushBB(cond.belse);
+    auto *ElseVal = evaluate(e->right, env);
+    env.mm.createGoto(cond.merge);
+    auto ElseBB = env.mm.popBB();
+    env.mm.pushBB(cond.merge);
+    auto mergeVal = env.mm.merge(ThenBB, ThenVal, ElseBB, ElseVal);
+    return mergeVal;
   }
   case eDEF: {
-    env[std::string(e->name)] = e->left;
-    return 0;
+    // env[std::string(e->name)] = e->left;
+    return NULL;
   }
   case eDEFUN: {
-    env[std::string(e->name)] = e->left;
-    return 0;
+    auto &mm = env.mm;
+    auto desc = mm.createFunction(e->name, Type::getInt32Ty(mm.getCtx()),
+                                  {Type::getInt32Ty(mm.getCtx())});
+    env.mm.pushFun(desc.first);
+    env.mm.pushBB(desc.second);
+    auto *val = evaluate(e->left, env);
+    mm.returnInst(val);
+    env.mm.popBB();
+    env.mm.popFun();
+    return NULL;
   }
   case eREF: {
-    return evaluate(env[std::string(e->name)], env);
+    if (strcmp(e->name, "arg") == 0) {
+      return env.mm.getFirstArgument();
+    }
+    // return evaluate(env[std::string(e->name)], env);
+    return NULL;
   }
   default:
     std::cout << "[ERROR] Unknown OP\n";
@@ -271,25 +338,38 @@ int evaluate(SExpression *e,
   }
 }
 
-// int main(void) {
-// char test[] =
-// "defun f:arg + 2; def x: f(f(2)) + 1;\nprint([4:1+1]);\nprint((x*3));";
-// char tmp[0x100] = {};
-// char *line = (char *)tmp;
-// while (true) {
-// size_t size = 0x100;
-// int read = 0;
-// if ((read = getline((char **)&line, &size, stdin)) == -1)
-  // continue;
-// line[read - 1] = '\0';
-// printf("input: %s\n", line);
-// fscanf(stdin, "%s", tmp);
-// SExpression *e = getAST(test);
-// std::unordered_map<std::string, SExpression *> env;
-// int result = evaluate(e, env);
-// printf("Result of '%s' is %d\n", test, result);
-// deleteExpression(e);
-// break;
-// }
-// return 0;
-// }
+int main(int argc, char **argv) {
+  std::ifstream file(argv[1]);
+  std::vector<char> file_contents;
+  {
+    file.unsetf(std::ios::skipws);
+    std::streampos fileSize;
+    file.seekg(0, std::ios::end);
+    fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    file_contents.reserve(fileSize);
+    // file.read(&file_contents[0], fileSize);
+    file_contents.insert(file_contents.begin(),
+                         std::istream_iterator<char>(file),
+                         std::istream_iterator<char>());
+    file_contents.push_back('\0');
+    // std::cout << "THE FILE :" << &file_contents[0] << "\n";
+  }
+  SExpression *e = getAST(&file_contents[0]);
+  Env env;
+  auto FuncDesc =
+      env.mm.createFunction("main", Type::getInt32Ty(env.mm.getCtx()),
+                            {Type::getInt32Ty(env.mm.getCtx())});
+  env.mm.pushFun(FuncDesc.first);
+  env.mm.pushBB(FuncDesc.second);
+  evaluate(e, env);
+
+  deleteExpression(e);
+  auto v = ConstantInt::get(env.mm.getCtx(), APInt(32, 0));
+  env.mm.returnInst(v);
+  env.mm.dump("out.ll");
+
+  llvm_shutdown();
+
+  return 0;
+}

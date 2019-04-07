@@ -16,6 +16,7 @@ static SExpression *allocateExpression() {
   b->left = NULL;
   b->right = NULL;
   b->cond = NULL;
+  b->arglist = NULL;
   return b;
 }
 
@@ -64,16 +65,25 @@ SExpression *createDef(char const *name, SExpression *exp) {
   return out;
 }
 
-SExpression *createDefun(char const *name, SExpression *exp) {
+SExpression *createDefun(char const *name, Arglist *arglist, SExpression *exp) {
   SExpression *out = allocateExpression();
 
   if (out == NULL)
     return NULL;
   out->type = eDEFUN;
+  out->arglist = arglist;
   out->name = (char *)malloc(strlen(name) + 1);
   strncpy(out->name, name, strlen(name) + 1);
   out->left = exp;
   return out;
+}
+
+Arglist *appendArglist(char const *name, Arglist *arglist) {
+  Arglist *newArg = (Arglist *)malloc(sizeof(Arglist));
+  newArg->name = (char *)malloc(strlen(name) + 1);
+  strncpy(newArg->name, name, strlen(name) + 1);
+  newArg->next = arglist;
+  return newArg;
 }
 
 SExpression *createCall(char const *name, SExpression *exp) {
@@ -113,11 +123,23 @@ SExpression *createOperation(EOperationType type, SExpression *left,
   return b;
 }
 
+void deleteArglist(Arglist *arglist) {
+  if (!arglist)
+    return;
+  auto next = arglist->next;
+  if (arglist->name)
+    free(arglist->name);
+  free(arglist);
+  deleteArglist(next);
+}
+
 void deleteExpression(SExpression *b) {
   if (b == NULL)
     return;
   if (b->name != NULL)
     free(b->name);
+  if (b->arglist)
+    deleteArglist(b->arglist);
   deleteExpression(b->left);
   deleteExpression(b->right);
 

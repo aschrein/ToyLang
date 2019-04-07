@@ -17,8 +17,10 @@
 %%
 
 [ \r\n\t]*   { continue; }
+"//".*   { continue; }
 [0-9]+       { sscanf(yytext, "%d", &yylval->value); return TOKEN_NUMBER; }
 "*"          { return TOKEN_STAR; }
+","          { return TOKEN_COMMA; }
 ":"          { return TOKEN_COLON; }
 "<"          { return TOKEN_LESS; }
 "=="         { return TOKEN_EQEQ; }
@@ -36,7 +38,7 @@
 "def"        { return TOKEN_DEF; }
 "if"        { return TOKEN_IF; }
 "else"        { return TOKEN_ELSE; }
-[a-z]+       {
+[a-zA-Z]+[0-9a-zA-Z]*       {
   //yylval->name = (char*)malloc(0x100);
   sscanf(yytext, "%s", yylval->name);
   return TOKEN_NAME;

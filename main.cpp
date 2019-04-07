@@ -84,6 +84,7 @@ public:
   std::unordered_map<std::string, Value *> scopeTop() {
     return stackVarTable.back();
   }
+
   void pushFun(Function *F) { fstack.push_back(F); }
   Value *getFirstArgument() { return fstack.back()->args().begin(); }
   void popFun() { fstack.pop_back(); }
@@ -260,6 +261,7 @@ SExpression *getAST(const char *expr) {
 
 struct Env {
   MyModule mm;
+  SmallVector<Value *, 8> args;
 };
 
 Value *evaluate(SExpression *e, Env &env) {
@@ -271,6 +273,15 @@ Value *evaluate(SExpression *e, Env &env) {
   case eSEM: {
     evaluate(e->left, env);
     return evaluate(e->right, env);
+  }
+  case eCOMMA: {
+    auto l = evaluate(e->left, env);
+    ASS(l);
+    env.args.push_back(l);
+    auto r = evaluate(e->right, env);
+    if (r)
+      env.args.push_back(r);
+    return NULL;
   }
   case eCOLON: {
     return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
@@ -300,8 +311,15 @@ Value *evaluate(SExpression *e, Env &env) {
       env.mm.printVal("%i\n", val);
       return NULL;
     } else {
+      env.args.clear();
       auto *val = evaluate(e->left, env);
-      return env.mm.createCall(e->name, {val});
+      if (val) {
+        ASS(env.args.empty());
+        env.args.push_back(val);
+      }
+      auto CE = env.mm.createCall(e->name, env.args);
+      env.args.clear();
+      return CE;
     }
     return NULL;
   }
@@ -331,11 +349,31 @@ Value *evaluate(SExpression *e, Env &env) {
   }
   case eDEFUN: {
     auto &mm = env.mm;
-    auto desc = mm.createFunction(e->name, Type::getInt32Ty(mm.getCtx()),
-                                  {Type::getInt32Ty(mm.getCtx())});
+    SmallVector<llvm::Type *, 4> argTypes;
+    {
+      auto head = e->arglist;
+      while (head) {
+        argTypes.push_back(Type::getInt32Ty(mm.getCtx()));
+        head = head->next;
+      }
+    }
+    auto desc =
+        mm.createFunction(e->name, Type::getInt32Ty(mm.getCtx()), argTypes);
+
     env.mm.pushFun(desc.first);
     env.mm.pushScope();
     env.mm.pushBB(desc.second);
+    {
+
+      auto head = e->arglist;
+      auto arghead = desc.first->args().begin();
+      int i = 0;
+      while (head) {
+        env.mm.createDef(head->name, arghead);
+        arghead++;
+        head = head->next;
+      }
+    }
     auto *val = evaluate(e->left, env);
     mm.returnInst(val);
     env.mm.popBB();
@@ -344,9 +382,9 @@ Value *evaluate(SExpression *e, Env &env) {
     return NULL;
   }
   case eREF: {
-    if (strcmp(e->name, "arg") == 0) {
-      return env.mm.getFirstArgument();
-    }
+    // if (strcmp(e->name, "arg") == 0) {
+    // return env.mm.getFirstArgument();
+    // }
 
     return env.mm.createLoad(env.mm.scopeTop()[e->name]);
   }

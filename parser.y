@@ -4,6 +4,7 @@
 #include "Lexer.h"
 
 int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
+    printf("PARSING ERROR:%s\n" , msg);
 }
 
 %}
@@ -24,6 +25,7 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
   int value;
   char name[0x100];
   SExpression *expression;
+  Arglist *arglist;
 }
 
 %token TOKEN_SEMICOLON   ";"
@@ -32,6 +34,7 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
 %token TOKEN_IF  "if"
 %token TOKEN_ELSE   "else"
 %token TOKEN_COLON   ":"
+%token TOKEN_COMMA   ","
 %token TOKEN_LSPAREN   "["
 %token TOKEN_RSPAREN   "]"
 %token TOKEN_LPAREN   "("
@@ -47,10 +50,12 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
 %token <value> TOKEN_NUMBER "number"
 %token <name> TOKEN_NAME "name"
 %type <expression> expr
+%type <arglist> arglist
 
 %left ";"
-%left "else"
 %left ":"
+%right ","
+%left "else"
 %left "<"
 %left "=="
 %left "+"
@@ -67,21 +72,28 @@ input
 expr
 : expr[L] "+" expr[R] { $$ = createOperation( eADD, $L, $R ); }
 | expr[L] ";" expr[R] { $$ = createOperation( eSEM, $L, $R ); }
+| expr[L] "," expr[R] { $$ = createOperation( eCOMMA, $L, $R ); }
 | expr[L] ";" { $$ = $L; }
 | expr[L] "*" expr[R] { $$ = createOperation( eMULTIPLY, $L, $R ); }
 | expr[L] "-" expr[R] { $$ = createOperation( eMINUS, $L, $R ); }
 | expr[L] "<" expr[R] { $$ = createOperation( eLESS, $L, $R ); }
 | expr[L] "==" expr[R] { $$ = createOperation( eEQEQ, $L, $R ); }
 | expr[L] "/" expr[R] { $$ = createOperation( eDIV, $L, $R ); }
-| "name" "(" expr[E] ")"            { $$ = createCall($1, $E); }
+| "defun" "name"[N] "(" arglist[L] ")" "{" expr[E] "}"{ $$ = createDefun($N, $L, $E); }
 | "def" "name"[N] ":" expr[E] { $$ = createDef($N, $E); }
 | "if" "(" expr[C] ")" "{" expr[L] "}" "else" "{" expr[R] "}" { $$ = createIF($C, $L, $R); }
-| "defun" "name"[N] "{" expr[E] "}"{ $$ = createDefun($N, $E); }
+| "name" "(" expr[E] ")"            { $$ = createCall($1, $E); }
 | "(" expr[E] ")"     { $$ = $E; }
-| "number"             { $$ = createNumber($1); }
 | "-" expr[E]             { $$ = createOperation(eMINUS, NULL, $E); }
 | "name" {$$ = createRef($1);}
 | "[" expr[L] ":" expr[R] "]" { $$ = createOperation(eCOLON, $L, $R); }
+| "number"             { $$ = createNumber($1); }
+;
+
+arglist
+: {$$ = NULL;}
+| "name"[L] { $$ = appendArglist($L, NULL); }
+| "name"[L] "," arglist[R] { $$ = appendArglist($L, $R); }
 ;
 
 %%

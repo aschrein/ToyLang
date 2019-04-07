@@ -30,6 +30,8 @@
 "-"          { return TOKEN_MINUS; }
 "("          { return TOKEN_LPAREN; }
 ")"          { return TOKEN_RPAREN; }
+"}"          { return TOKEN_RBRACE; }
+"{"          { return TOKEN_LBRACE; }
 "defun"      { return TOKEN_DEFUN; }
 "def"        { return TOKEN_DEF; }
 "if"        { return TOKEN_IF; }

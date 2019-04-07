@@ -36,6 +36,8 @@ int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
 %token TOKEN_RSPAREN   "]"
 %token TOKEN_LPAREN   "("
 %token TOKEN_RPAREN   ")"
+%token TOKEN_RBRACE   "}"
+%token TOKEN_LBRACE   "{"
 %token TOKEN_PLUS     "+"
 %token TOKEN_MINUS     "-"
 %token TOKEN_STAR     "*"
@@ -73,8 +75,8 @@ expr
 | expr[L] "/" expr[R] { $$ = createOperation( eDIV, $L, $R ); }
 | "name" "(" expr[E] ")"            { $$ = createCall($1, $E); }
 | "def" "name"[N] ":" expr[E] { $$ = createDef($N, $E); }
-| "if" "(" expr[C] ")" expr[L] "else" expr[R] { $$ = createIF($C, $L, $R); }
-| "defun" "name"[N] ":" expr[E] { $$ = createDefun($N, $E); }
+| "if" "(" expr[C] ")" "{" expr[L] "}" "else" "{" expr[R] "}" { $$ = createIF($C, $L, $R); }
+| "defun" "name"[N] "{" expr[E] "}"{ $$ = createDefun($N, $E); }
 | "(" expr[E] ")"     { $$ = $E; }
 | "number"             { $$ = createNumber($1); }
 | "-" expr[E]             { $$ = createOperation(eMINUS, NULL, $E); }

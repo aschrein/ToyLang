@@ -61,6 +61,7 @@ private:
 
   std::vector<Function *> fstack;
   std::vector<BasicBlock *> bbstack;
+  std::vector<std::unordered_map<std::string, Value *>> stackVarTable;
 
 public:
   MyModule() {
@@ -76,6 +77,12 @@ public:
         Function::Create(FunctionType::get(Type::getVoidTy(ctx),
                                            {Type::getInt8PtrTy(ctx)}, true),
                          Function::ExternalLinkage, "printf", module);
+  }
+  void pushScope() { stackVarTable.push_back({}); }
+  void pushScopeInherit() { stackVarTable.push_back(stackVarTable.back()); }
+  void popScope() { stackVarTable.pop_back(); }
+  std::unordered_map<std::string, Value *> scopeTop() {
+    return stackVarTable.back();
   }
   void pushFun(Function *F) { fstack.push_back(F); }
   Value *getFirstArgument() { return fstack.back()->args().begin(); }
@@ -168,6 +175,19 @@ public:
     std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
     builder->CreateBr(toBB);
   }
+  void createDef(std::string const &name, Value *val) {
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    auto *NewVal = builder->CreateAlloca(Type::getInt32Ty(ctx));
+    builder->CreateStore(val, NewVal);
+    ASS(stackVarTable.size());
+    stackVarTable.back()[name] = NewVal;
+  }
+  Value *createLoad(Value *val) {
+    auto BB = bbstack.back();
+    std::unique_ptr<IRBuilder<>> builder(new IRBuilder<>(BB));
+    return builder->CreateLoad(Type::getInt32Ty(ctx), val);
+  }
   struct CondBranch {
     BasicBlock *then;
     BasicBlock *belse;
@@ -250,8 +270,7 @@ Value *evaluate(SExpression *e, Env &env) {
     return env.mm.createConst(e->value);
   case eSEM: {
     evaluate(e->left, env);
-    evaluate(e->right, env);
-    return NULL;
+    return evaluate(e->right, env);
   }
   case eCOLON: {
     return env.mm.createMul(evaluate(e->left, env), evaluate(e->right, env));
@@ -291,19 +310,23 @@ Value *evaluate(SExpression *e, Env &env) {
     auto cond = env.mm.createCond(val);
     env.mm.popBB();
     env.mm.pushBB(cond.then);
+    env.mm.pushScopeInherit();
     auto *ThenVal = evaluate(e->left, env);
     env.mm.createGoto(cond.merge);
     auto ThenBB = env.mm.popBB();
+    env.mm.popScope();
     env.mm.pushBB(cond.belse);
+    env.mm.pushScopeInherit();
     auto *ElseVal = evaluate(e->right, env);
     env.mm.createGoto(cond.merge);
     auto ElseBB = env.mm.popBB();
+    env.mm.popScope();
     env.mm.pushBB(cond.merge);
     auto mergeVal = env.mm.merge(ThenBB, ThenVal, ElseBB, ElseVal);
     return mergeVal;
   }
   case eDEF: {
-    ASS(false && "TODO");
+    env.mm.createDef(e->name, evaluate(e->left, env));
     return NULL;
   }
   case eDEFUN: {
@@ -311,19 +334,21 @@ Value *evaluate(SExpression *e, Env &env) {
     auto desc = mm.createFunction(e->name, Type::getInt32Ty(mm.getCtx()),
                                   {Type::getInt32Ty(mm.getCtx())});
     env.mm.pushFun(desc.first);
+    env.mm.pushScope();
     env.mm.pushBB(desc.second);
     auto *val = evaluate(e->left, env);
     mm.returnInst(val);
     env.mm.popBB();
     env.mm.popFun();
+    env.mm.popScope();
     return NULL;
   }
   case eREF: {
     if (strcmp(e->name, "arg") == 0) {
       return env.mm.getFirstArgument();
     }
-    ASS(false && "TODO");
-    return NULL;
+
+    return env.mm.createLoad(env.mm.scopeTop()[e->name]);
   }
   default:
     std::cout << "[ERROR] Unknown OP\n";
@@ -354,6 +379,7 @@ int main(int argc, char **argv) {
       env.mm.createFunction("main", Type::getInt32Ty(env.mm.getCtx()),
                             {Type::getInt32Ty(env.mm.getCtx())});
   env.mm.pushFun(FuncDesc.first);
+  env.mm.pushScope();
   env.mm.pushBB(FuncDesc.second);
   evaluate(e, env);
 
